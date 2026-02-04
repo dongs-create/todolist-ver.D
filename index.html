@@ -320,6 +320,41 @@
         setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
       };
 
+      const [editingTodoNote, setEditingTodoNote] = useState(null);
+      const [todoNoteText, setTodoNoteText] = useState('');
+      const [draggedItem, setDraggedItem] = useState(null);
+
+      const handleDragStart = (e, project) => {
+        setDraggedItem(project);
+        e.dataTransfer.effectAllowed = 'move';
+      };
+
+      const handleDragOver = (e, project) => {
+        e.preventDefault();
+        if (draggedItem && draggedItem.id !== project.id) {
+          const newOrder = sortedByDday.map(p => p.id);
+          const draggedIdx = newOrder.indexOf(draggedItem.id);
+          const targetIdx = newOrder.indexOf(project.id);
+          
+          newOrder.splice(draggedIdx, 1);
+          newOrder.splice(targetIdx, 0, draggedItem.id);
+          
+          setPriorityOrder(newOrder);
+        }
+      };
+
+      const handleDragEnd = () => {
+        setDraggedItem(null);
+      };
+
+      const saveTodoNote = (projectId) => {
+        setProjects(projects.map(p => 
+          p.id === projectId ? { ...p, notes: todoNoteText } : p
+        ));
+        setEditingTodoNote(null);
+        setTodoNoteText('');
+      };
+
       const toggleTodoComplete = (projectId) => {
         setTodoCompleted(prev => ({
           ...prev,
@@ -532,53 +567,126 @@
 
       const renderPriority = () => (
         <div className="space-y-1">
-          <div className="text-sm text-gray-500 mb-4">
-            오늘 처리할 프로젝트 목록입니다. 완료 시 체크박스를 클릭하세요.
+          <div className="text-sm text-gray-500 mb-4 flex items-center gap-2">
+            <span>⋮⋮</span> 드래그하여 우선순위를 변경할 수 있습니다. 프로젝트를 클릭하면 비고를 편집할 수 있습니다.
           </div>
           <div className="bg-white rounded-lg border divide-y">
-            {sortedByDday.map((project) => {
+            {sortedByDday.map((project, index) => {
               const isCompleted = todoCompleted[project.id];
               const isUrgent = project.dday !== null && project.dday <= 2;
+              const isDragging = draggedItem?.id === project.id;
+              const isEditingNote = editingTodoNote === project.id;
               
               return (
                 <div
                   key={project.id}
-                  className={`flex items-center gap-3 px-4 py-3 transition-colors ${
-                    isCompleted ? 'bg-gray-50' : isUrgent ? 'bg-red-50' : 'hover:bg-slate-50'
-                  }`}
+                  draggable={!isEditingNote}
+                  onDragStart={(e) => handleDragStart(e, project)}
+                  onDragOver={(e) => handleDragOver(e, project)}
+                  onDragEnd={handleDragEnd}
+                  className={`transition-all ${isDragging ? 'opacity-50' : ''}`}
                 >
-                  <button
-                    onClick={() => toggleTodoComplete(project.id)}
-                    className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-                      isCompleted 
-                        ? 'bg-green-500 border-green-500 text-white' 
-                        : 'border-gray-300 hover:border-gray-400'
+                  <div
+                    className={`flex items-center gap-3 px-4 py-3 cursor-move ${
+                      isCompleted ? 'bg-gray-50' : isUrgent ? 'bg-red-50' : 'hover:bg-slate-50'
                     }`}
                   >
-                    {isCompleted && '✓'}
-                  </button>
-                  
-                  <div className={`flex-1 min-w-0 ${isCompleted ? 'opacity-50' : ''}`}>
-                    <div className="flex items-center gap-2">
-                      <span className={`font-medium ${isCompleted ? 'line-through text-gray-500' : 'text-gray-900'}`}>
-                        {project.projectName}
-                      </span>
-                      <span className={`text-xs ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>
-                        {project.projectCode}
+                    {/* 드래그 핸들 + 순번 */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-gray-400 cursor-move">⋮⋮</span>
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${
+                        isUrgent ? 'bg-red-500' : 'bg-slate-500'
+                      }`}>
+                        {index + 1}
                       </span>
                     </div>
-                    <div className={`text-xs ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>
-                      {project.client} · {project.languagePair} · 번역: {project.translator || '-'} · 감수: {project.reviewer || '-'}
+
+                    {/* 완료 체크박스 */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleTodoComplete(project.id);
+                      }}
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                        isCompleted 
+                          ? 'bg-green-500 border-green-500 text-white' 
+                          : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      {isCompleted && '✓'}
+                    </button>
+                    
+                    {/* 프로젝트 정보 - 클릭하면 비고 편집 */}
+                    <div 
+                      className={`flex-1 min-w-0 cursor-pointer ${isCompleted ? 'opacity-50' : ''}`}
+                      onClick={() => {
+                        if (!isEditingNote) {
+                          setEditingTodoNote(project.id);
+                          setTodoNoteText(project.notes || '');
+                        }
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`font-medium ${isCompleted ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                          {project.projectName}
+                        </span>
+                        <span className={`text-xs ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {project.projectCode}
+                        </span>
+                      </div>
+                      <div className={`text-xs ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>
+                        {project.client} · {project.languagePair} · 번역: {project.translator || '-'} · 감수: {project.reviewer || '-'}
+                      </div>
                     </div>
+                    
+                    {/* D-day */}
+                    <div className={`flex-shrink-0 ${isCompleted ? 'opacity-50' : ''}`}>
+                      <DdayBadge dday={project.dday} finalDelivery={project.finalDelivery} />
+                    </div>
+                    
+                    {/* 비고 아이콘 */}
+                    {project.notes && !isEditingNote && (
+                      <div className={`flex-shrink-0 ${isCompleted ? 'opacity-50' : ''}`} title={project.notes}>
+                        <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">📝</span>
+                      </div>
+                    )}
                   </div>
                   
-                  <div className={`flex-shrink-0 ${isCompleted ? 'opacity-50' : ''}`}>
-                    <DdayBadge dday={project.dday} finalDelivery={project.finalDelivery} />
-                  </div>
-                  
-                  {project.notes && (
-                    <div className={`flex-shrink-0 ${isCompleted ? 'opacity-50' : ''}`} title={project.notes}>
-                      <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">📝</span>
+                  {/* 비고 편집 영역 */}
+                  {isEditingNote && (
+                    <div className="px-4 py-3 bg-slate-50 border-t">
+                      <div className="text-xs text-gray-600 mb-2">📝 비고 편집</div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={todoNoteText}
+                          onChange={(e) => setTodoNoteText(e.target.value)}
+                          placeholder="비고 내용을 입력하세요"
+                          className="flex-1 text-sm border rounded px-3 py-2"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveTodoNote(project.id);
+                            if (e.key === 'Escape') setEditingTodoNote(null);
+                          }}
+                        />
+                        <button
+                          onClick={() => saveTodoNote(project.id)}
+                          className="px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
+                        >
+                          저장
+                        </button>
+                        <button
+                          onClick={() => setEditingTodoNote(null)}
+                          className="px-3 py-2 bg-gray-300 rounded hover:bg-gray-400 text-sm"
+                        >
+                          취소
+                        </button>
+                      </div>
+                      {project.notes && (
+                        <div className="mt-2 text-xs text-gray-500">
+                          현재 비고: {project.notes}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
