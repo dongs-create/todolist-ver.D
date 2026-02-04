@@ -1,0 +1,781 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { Calendar, List, Clock, Plus, Edit2, Trash2, Check, X, AlertTriangle, ChevronLeft, ChevronRight, GripVertical, MessageSquarePlus, Settings, CheckCircle2, Circle } from 'lucide-react';
+
+const initialProjects = [
+  {
+    id: 1,
+    projectCode: 'P20260204-001',
+    projectName: '렉스코드 김동환',
+    client: '렉스코드',
+    manager: '김동환',
+    startDate: '2026-02-04',
+    dueDate: '2026-02-10',
+    languagePair: 'KO-EN',
+    translator: '홍길동',
+    translationDeadline: '2026-02-07',
+    reviewer: '이영희',
+    reviewDeadline: '2026-02-09',
+    finalDelivery: '',
+    notes: '긴급 프로젝트'
+  },
+  {
+    id: 2,
+    projectCode: 'P20260203-002',
+    projectName: 'ABC화장품 제품설명서',
+    client: 'ABC코스메틱',
+    manager: '김동환',
+    startDate: '2026-02-03',
+    dueDate: '2026-02-08',
+    languagePair: 'KO-EN',
+    translator: '박철수',
+    translationDeadline: '2026-02-05',
+    reviewer: '김미영',
+    reviewDeadline: '2026-02-07',
+    finalDelivery: '',
+    notes: ''
+  },
+  {
+    id: 3,
+    projectCode: 'P20260201-003',
+    projectName: '의료기기 매뉴얼',
+    client: '메디텍',
+    manager: '김동환',
+    startDate: '2026-02-01',
+    dueDate: '2026-02-15',
+    languagePair: 'KO-JA',
+    translator: '다나카',
+    translationDeadline: '2026-02-10',
+    reviewer: '사토',
+    reviewDeadline: '2026-02-13',
+    finalDelivery: '',
+    notes: '기술용어 검토 필요'
+  },
+  {
+    id: 4,
+    projectCode: 'P20260130-004',
+    projectName: '법률계약서 번역',
+    client: '법무법인 한빛',
+    manager: '김동환',
+    startDate: '2026-01-30',
+    dueDate: '2026-02-06',
+    languagePair: 'EN-KO',
+    translator: '최정민',
+    translationDeadline: '2026-02-03',
+    reviewer: '김동환',
+    reviewDeadline: '2026-02-05',
+    finalDelivery: '2026-02-05',
+    notes: ''
+  },
+  {
+    id: 5,
+    projectCode: 'P20260205-005',
+    projectName: '금융앱 UI 로컬라이제이션',
+    client: '핀테크뱅크',
+    manager: '김동환',
+    startDate: '2026-02-05',
+    dueDate: '2026-02-20',
+    languagePair: 'KO-Multi',
+    translator: '다국어팀',
+    translationDeadline: '2026-02-15',
+    reviewer: '김동환',
+    reviewDeadline: '2026-02-18',
+    finalDelivery: '',
+    notes: 'AR, VI, TH, ID 포함'
+  }
+];
+
+const statusColors = {
+  '착수': 'text-blue-600',
+  '진행': 'text-gray-600',
+  '납품': 'text-green-600',
+  '납품 예정': 'text-orange-500'
+};
+
+const calendarColors = [
+  'bg-blue-500',
+  'bg-green-500',
+  'bg-purple-500',
+  'bg-pink-500',
+  'bg-indigo-500',
+  'bg-teal-500',
+  'bg-orange-500',
+  'bg-cyan-500'
+];
+
+// 날짜를 한국어 형식으로 변환
+const formatDateKorean = (dateStr) => {
+  if (!dateStr) return '-';
+  const date = new Date(dateStr);
+  return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
+};
+
+// 진행상황 자동 계산 함수
+const calculateStatus = (project, todayStr) => {
+  // 최종납품일이 있으면 '납품'
+  if (project.finalDelivery) {
+    return '납품';
+  }
+  // 착수일이 오늘이면 '착수'
+  if (project.startDate === todayStr) {
+    return '착수';
+  }
+  // 납품예정일이 있고 아직 납품 안됐으면 '납품 예정'으로 표시 (D-day 기준)
+  // 그 외는 '진행'
+  return '진행';
+};
+
+// D-day 표시 컴포넌트
+const DdayBadge = ({ dday, finalDelivery }) => {
+  if (finalDelivery) {
+    return (
+      <div className="flex items-center gap-1">
+        <CheckCircle2 size={16} className="text-green-500" />
+        <span className="text-green-600">완료</span>
+      </div>
+    );
+  }
+  if (dday === null) return <span className="text-gray-400">-</span>;
+  
+  if (dday < 0) {
+    return (
+      <div className="flex items-center gap-1">
+        <Circle size={14} className="fill-red-500 text-red-500" />
+        <span className="text-red-600 font-semibold">D+{Math.abs(dday)}</span>
+      </div>
+    );
+  }
+  if (dday === 0) {
+    return (
+      <div className="flex items-center gap-1">
+        <Circle size={14} className="fill-red-500 text-red-500" />
+        <span className="text-red-600 font-semibold">D-day</span>
+      </div>
+    );
+  }
+  if (dday <= 2) {
+    return (
+      <div className="flex items-center gap-1">
+        <Circle size={14} className="fill-orange-400 text-orange-400" />
+        <span className="text-orange-500 font-semibold">D-{dday}</span>
+      </div>
+    );
+  }
+  if (dday <= 5) {
+    return (
+      <div className="flex items-center gap-1">
+        <Circle size={14} className="fill-yellow-400 text-yellow-400" />
+        <span className="text-yellow-600">D-{dday}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <Circle size={14} className="fill-green-400 text-green-400" />
+      <span className="text-green-600">D-{dday}</span>
+    </div>
+  );
+};
+
+// 진행상황 표시 컴포넌트
+const StatusBadge = ({ status }) => {
+  if (status === '납품') {
+    return (
+      <div className="flex items-center gap-1">
+        <CheckCircle2 size={16} className="text-green-500" />
+        <span className="text-green-600">납품</span>
+      </div>
+    );
+  }
+  if (status === '착수') {
+    return (
+      <div className="flex items-center gap-1">
+        <Circle size={14} className="fill-blue-500 text-blue-500" />
+        <span className="text-blue-600">착수</span>
+      </div>
+    );
+  }
+  // 진행 or 납품 예정
+  return (
+    <div className="flex items-center gap-1">
+      <Settings size={14} className="text-gray-500" />
+      <span className="text-gray-600">진행</span>
+    </div>
+  );
+};
+
+export default function PMTodoApp() {
+  const [activeTab, setActiveTab] = useState('list');
+  
+  // localStorage에서 데이터 불러오기
+  const [projects, setProjects] = useState(() => {
+    const saved = localStorage.getItem('pm-todo-projects');
+    return saved ? JSON.parse(saved) : initialProjects;
+  });
+  
+  const [showModal, setShowModal] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
+  const [formData, setFormData] = useState({});
+  const [currentMonth, setCurrentMonth] = useState(new Date(2026, 1, 1));
+  
+  const [priorityOrder, setPriorityOrder] = useState(() => {
+    const saved = localStorage.getItem('pm-todo-priority');
+    return saved ? JSON.parse(saved) : [];
+  });
+  
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [editingNote, setEditingNote] = useState(null);
+  const [noteText, setNoteText] = useState('');
+  const [editingFinalDelivery, setEditingFinalDelivery] = useState(null);
+  
+  const [todoCompleted, setTodoCompleted] = useState(() => {
+    const saved = localStorage.getItem('pm-todo-completed');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  // 데이터 변경 시 localStorage에 저장
+  useEffect(() => {
+    localStorage.setItem('pm-todo-projects', JSON.stringify(projects));
+  }, [projects]);
+
+  useEffect(() => {
+    localStorage.setItem('pm-todo-priority', JSON.stringify(priorityOrder));
+  }, [priorityOrder]);
+
+  useEffect(() => {
+    localStorage.setItem('pm-todo-completed', JSON.stringify(todoCompleted));
+  }, [todoCompleted]);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const calculateDday = (dueDate) => {
+    if (!dueDate) return null;
+    const due = new Date(dueDate);
+    due.setHours(0, 0, 0, 0);
+    const diff = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
+    return diff;
+  };
+
+  const formatDday = (dday) => {
+    if (dday === null) return '-';
+    if (dday === 0) return 'D-Day';
+    if (dday > 0) return `D-${dday}`;
+    return `D+${Math.abs(dday)}`;
+  };
+
+  const todayStr = today.toISOString().slice(0, 10);
+
+  const projectsWithDday = useMemo(() => {
+    return projects.map(p => ({
+      ...p,
+      dday: calculateDday(p.dueDate),
+      status: calculateStatus(p, todayStr)
+    }));
+  }, [projects, todayStr]);
+
+  const sortedByDday = useMemo(() => {
+    const activeProjects = projectsWithDday
+      .filter(p => p.status !== '납품')
+      .sort((a, b) => {
+        if (a.dday === null) return 1;
+        if (b.dday === null) return -1;
+        return a.dday - b.dday;
+      });
+    
+    if (priorityOrder.length > 0) {
+      const ordered = [];
+      const remaining = [...activeProjects];
+      
+      priorityOrder.forEach(id => {
+        const idx = remaining.findIndex(p => p.id === id);
+        if (idx !== -1) {
+          ordered.push(remaining.splice(idx, 1)[0]);
+        }
+      });
+      
+      return [...ordered, ...remaining];
+    }
+    
+    return activeProjects;
+  }, [projectsWithDday, priorityOrder]);
+
+  const getDaysInMonth = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDay = firstDay.getDay();
+    
+    const days = [];
+    
+    const prevMonth = new Date(year, month, 0);
+    const prevMonthDays = prevMonth.getDate();
+    for (let i = startingDay - 1; i >= 0; i--) {
+      days.push({
+        day: prevMonthDays - i,
+        isCurrentMonth: false,
+        date: new Date(year, month - 1, prevMonthDays - i)
+      });
+    }
+    
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push({
+        day: i,
+        isCurrentMonth: true,
+        date: new Date(year, month, i)
+      });
+    }
+    
+    const remainingDays = 42 - days.length;
+    for (let i = 1; i <= remainingDays; i++) {
+      days.push({
+        day: i,
+        isCurrentMonth: false,
+        date: new Date(year, month + 1, i)
+      });
+    }
+    
+    return days;
+  };
+
+  const getProjectsForDate = (date) => {
+    const dateStr = date.toISOString().slice(0, 10);
+    return projects.filter(p => p.dueDate === dateStr);
+  };
+
+  const prevMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
+  };
+
+  const nextMonth = () => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
+  };
+
+  const handleDragStart = (e, project) => {
+    setDraggedItem(project);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, project) => {
+    e.preventDefault();
+    if (draggedItem && draggedItem.id !== project.id) {
+      const newOrder = sortedByDday.map(p => p.id);
+      const draggedIdx = newOrder.indexOf(draggedItem.id);
+      const targetIdx = newOrder.indexOf(project.id);
+      
+      newOrder.splice(draggedIdx, 1);
+      newOrder.splice(targetIdx, 0, draggedItem.id);
+      
+      setPriorityOrder(newOrder);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+  };
+
+  const startEditNote = (project) => {
+    setEditingNote(project.id);
+    setNoteText(project.notes || '');
+  };
+
+  const saveNote = (projectId) => {
+    setProjects(projects.map(p => 
+      p.id === projectId ? { ...p, notes: noteText } : p
+    ));
+    setEditingNote(null);
+    setNoteText('');
+  };
+
+  const saveFinalDelivery = (projectId, date) => {
+    setProjects(projects.map(p => 
+      p.id === projectId ? { ...p, finalDelivery: date } : p
+    ));
+    setEditingFinalDelivery(null);
+  };
+
+  const toggleTodoComplete = (projectId) => {
+    setTodoCompleted(prev => ({
+      ...prev,
+      [projectId]: !prev[projectId]
+    }));
+  };
+
+  const openAddModal = () => {
+    setEditingProject(null);
+    const dateStr = new Date().toISOString().slice(0,10).replace(/-/g,'');
+    const existingCodes = projects.filter(p => p.projectCode.startsWith(`P${dateStr}`));
+    const nextNum = String(existingCodes.length + 1).padStart(3, '0');
+    setFormData({
+      projectCode: `P${dateStr}-${nextNum}`,
+      projectName: '',
+      client: '',
+      manager: '김동환',
+      startDate: new Date().toISOString().slice(0, 10),
+      dueDate: '',
+      languagePair: 'KO-EN',
+      translator: '',
+      translationDeadline: '',
+      reviewer: '',
+      reviewDeadline: '',
+      finalDelivery: '',
+      notes: ''
+    });
+    setShowModal(true);
+  };
+
+  const openEditModal = (project) => {
+    setEditingProject(project);
+    setFormData({ ...project });
+    setShowModal(true);
+  };
+
+  const saveProject = () => {
+    if (editingProject) {
+      setProjects(projects.map(p => p.id === editingProject.id ? { ...formData, id: editingProject.id } : p));
+    } else {
+      setProjects([...projects, { ...formData, id: Date.now() }]);
+    }
+    setShowModal(false);
+  };
+
+  const deleteProject = (id) => {
+    if (confirm('프로젝트를 삭제하시겠습니까?')) {
+      setProjects(projects.filter(p => p.id !== id));
+      setPriorityOrder(priorityOrder.filter(pid => pid !== id));
+    }
+  };
+
+  const tabs = [
+    { id: 'list', label: '전체 프로젝트', icon: List },
+    { id: 'schedule', label: '납품일정', icon: Calendar },
+    { id: 'priority', label: 'TODAY TO DO LIST', icon: Clock }
+  ];
+
+  const renderProjectList = () => (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead className="bg-slate-100 sticky top-0">
+          <tr>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">프로젝트코드</th>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">프로젝트명</th>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">고객사</th>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">담당자</th>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">착수일</th>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">납품예정일</th>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">언어쌍</th>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">번역사</th>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">번역기한</th>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">감수자</th>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">감수기한</th>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">최종납품일</th>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">D-day</th>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">진행상황</th>
+            <th className="px-2 py-2 text-left font-medium whitespace-nowrap">비고</th>
+            <th className="px-2 py-2 text-center font-medium whitespace-nowrap">관리</th>
+          </tr>
+        </thead>
+        <tbody>
+          {projectsWithDday.map(project => (
+            <tr key={project.id} className="border-b hover:bg-slate-50">
+              <td className="px-2 py-2 font-mono">{project.projectCode}</td>
+              <td className="px-2 py-2 font-medium whitespace-nowrap">{project.projectName}</td>
+              <td className="px-2 py-2 whitespace-nowrap">{project.client}</td>
+              <td className="px-2 py-2 whitespace-nowrap">{project.manager}</td>
+              <td className="px-2 py-2 whitespace-nowrap">{formatDateKorean(project.startDate)}</td>
+              <td className="px-2 py-2 whitespace-nowrap">{formatDateKorean(project.dueDate)}</td>
+              <td className="px-2 py-2 whitespace-nowrap">{project.languagePair}</td>
+              <td className="px-2 py-2 whitespace-nowrap">{project.translator}</td>
+              <td className="px-2 py-2 whitespace-nowrap">{formatDateKorean(project.translationDeadline)}</td>
+              <td className="px-2 py-2 whitespace-nowrap">{project.reviewer}</td>
+              <td className="px-2 py-2 whitespace-nowrap">{formatDateKorean(project.reviewDeadline)}</td>
+              <td className="px-2 py-2 whitespace-nowrap">
+                {editingFinalDelivery === project.id ? (
+                  <input
+                    type="date"
+                    defaultValue={project.finalDelivery || ''}
+                    className="border rounded px-1 py-0.5 text-xs w-28"
+                    autoFocus
+                    onBlur={(e) => saveFinalDelivery(project.id, e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') saveFinalDelivery(project.id, e.target.value);
+                      if (e.key === 'Escape') setEditingFinalDelivery(null);
+                    }}
+                  />
+                ) : (
+                  <span 
+                    onClick={() => setEditingFinalDelivery(project.id)}
+                    className="cursor-pointer hover:bg-slate-100 px-1 py-0.5 rounded min-w-16 inline-block"
+                  >
+                    {project.finalDelivery ? formatDateKorean(project.finalDelivery) : <span className="text-gray-400">클릭하여 입력</span>}
+                  </span>
+                )}
+              </td>
+              <td className="px-2 py-2 whitespace-nowrap">
+                <DdayBadge dday={project.dday} finalDelivery={project.finalDelivery} />
+              </td>
+              <td className="px-2 py-2 whitespace-nowrap">
+                <StatusBadge status={project.status} />
+              </td>
+              <td className="px-2 py-2 max-w-32 truncate" title={project.notes}>{project.notes || '-'}</td>
+              <td className="px-2 py-2 text-center whitespace-nowrap">
+                <button onClick={() => openEditModal(project)} className="p-1 hover:bg-slate-200 rounded mr-1">
+                  <Edit2 size={12} />
+                </button>
+                <button onClick={() => deleteProject(project.id)} className="p-1 hover:bg-red-100 rounded text-red-500">
+                  <Trash2 size={12} />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
+  const renderCalendar = () => {
+    const days = getDaysInMonth(currentMonth);
+    const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
+    const monthName = `${currentMonth.getFullYear()}년 ${currentMonth.getMonth() + 1}월`;
+
+    return (
+      <div className="bg-white rounded-lg border">
+        <div className="flex items-center justify-between p-4 border-b">
+          <button onClick={prevMonth} className="p-2 hover:bg-slate-100 rounded">
+            <ChevronLeft size={20} />
+          </button>
+          <h3 className="text-lg font-semibold">{monthName}</h3>
+          <button onClick={nextMonth} className="p-2 hover:bg-slate-100 rounded">
+            <ChevronRight size={20} />
+          </button>
+        </div>
+        
+        <div className="grid grid-cols-7">
+          {weekDays.map((day, idx) => (
+            <div key={day} className={`p-2 text-center text-sm font-medium border-b ${idx === 0 ? 'text-red-500' : idx === 6 ? 'text-blue-500' : 'text-gray-700'}`}>
+              {day}
+            </div>
+          ))}
+          
+          {days.map((dayInfo, idx) => {
+            const dayProjects = getProjectsForDate(dayInfo.date);
+            const isToday = dayInfo.date.toDateString() === today.toDateString();
+            const dayOfWeek = dayInfo.date.getDay();
+            
+            return (
+              <div
+                key={idx}
+                className={`min-h-28 p-1 border-b border-r ${!dayInfo.isCurrentMonth ? 'bg-gray-50' : ''} ${isToday ? 'bg-blue-50' : ''}`}
+              >
+                <div className={`text-xs font-medium mb-1 ${!dayInfo.isCurrentMonth ? 'text-gray-400' : dayOfWeek === 0 ? 'text-red-500' : dayOfWeek === 6 ? 'text-blue-500' : ''} ${isToday ? 'bg-blue-500 text-white w-5 h-5 rounded-full flex items-center justify-center' : ''}`}>
+                  {dayInfo.day}
+                </div>
+                <div className="space-y-1 overflow-y-auto max-h-24">
+                  {dayProjects.map(p => {
+                    const isDelivered = !!p.finalDelivery;
+                    return (
+                      <div
+                        key={p.id}
+                        className={`text-xs px-1.5 py-1 rounded border cursor-pointer hover:shadow-sm ${
+                          isDelivered 
+                            ? 'bg-gray-100 border-gray-300 text-gray-500' 
+                            : 'bg-white border-gray-200 text-gray-800 hover:border-gray-400'
+                        }`}
+                        title={`${p.projectName} (${p.projectCode}, ${p.client})`}
+                      >
+                        <div className={`font-medium truncate ${isDelivered ? 'text-gray-500' : 'text-gray-800'}`}>
+                          {p.projectName}
+                        </div>
+                        <div className={`text-[10px] truncate ${isDelivered ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {p.projectCode} | {p.client}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderPriority = () => (
+    <div className="space-y-1">
+      <div className="text-sm text-gray-500 mb-4">
+        오늘 처리할 프로젝트 목록입니다. 완료 시 체크박스를 클릭하세요.
+      </div>
+      <div className="bg-white rounded-lg border divide-y">
+        {sortedByDday.map((project) => {
+          const isCompleted = todoCompleted[project.id];
+          const isUrgent = project.dday !== null && project.dday <= 2;
+          
+          return (
+            <div
+              key={project.id}
+              className={`flex items-center gap-3 px-4 py-3 transition-colors ${
+                isCompleted ? 'bg-gray-50' : isUrgent ? 'bg-red-50' : 'hover:bg-slate-50'
+              }`}
+            >
+              {/* 완료 체크박스 */}
+              <button
+                onClick={() => toggleTodoComplete(project.id)}
+                className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                  isCompleted 
+                    ? 'bg-green-500 border-green-500 text-white' 
+                    : 'border-gray-300 hover:border-gray-400'
+                }`}
+              >
+                {isCompleted && <Check size={14} />}
+              </button>
+              
+              {/* 프로젝트 정보 */}
+              <div className={`flex-1 min-w-0 ${isCompleted ? 'opacity-50' : ''}`}>
+                <div className="flex items-center gap-2">
+                  <span className={`font-medium ${isCompleted ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                    {project.projectName}
+                  </span>
+                  <span className={`text-xs ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>
+                    {project.projectCode}
+                  </span>
+                </div>
+                <div className={`text-xs ${isCompleted ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {project.client} · {project.languagePair} · 번역: {project.translator || '-'} · 감수: {project.reviewer || '-'}
+                </div>
+              </div>
+              
+              {/* D-day */}
+              <div className={`flex-shrink-0 ${isCompleted ? 'opacity-50' : ''}`}>
+                <DdayBadge dday={project.dday} finalDelivery={project.finalDelivery} />
+              </div>
+              
+              {/* 비고 아이콘 */}
+              {project.notes && (
+                <div className={`flex-shrink-0 ${isCompleted ? 'opacity-50' : ''}`} title={project.notes}>
+                  <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded">📝</span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {sortedByDday.length === 0 && (
+        <div className="text-center py-10 text-gray-500 bg-white rounded-lg border">
+          진행중인 프로젝트가 없습니다.
+        </div>
+      )}
+      
+      {/* 완료 통계 */}
+      {sortedByDday.length > 0 && (
+        <div className="text-sm text-gray-500 text-right pt-2">
+          완료: {Object.values(todoCompleted).filter(Boolean).length} / {sortedByDday.length}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="bg-slate-800 text-white px-6 py-4">
+        <h1 className="text-xl font-bold">KDH PM TO-DO LIST</h1>
+        <p className="text-sm opacity-80">번역 프로젝트 관리 시스템</p>
+      </div>
+
+      <div className="border-b bg-white">
+        <div className="flex">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tab.id 
+                  ? 'border-slate-800 text-slate-800' 
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <tab.icon size={18} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-6">
+        <div className="mb-4 flex justify-between items-center">
+          <h2 className="text-lg font-semibold">
+            {tabs.find(t => t.id === activeTab)?.label}
+          </h2>
+          {activeTab === 'list' && (
+            <button
+              onClick={openAddModal}
+              className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded hover:bg-slate-700"
+            >
+              <Plus size={18} /> 프로젝트 추가
+            </button>
+          )}
+        </div>
+
+        {activeTab === 'list' && renderProjectList()}
+        {activeTab === 'schedule' && renderCalendar()}
+        {activeTab === 'priority' && renderPriority()}
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-4 border-b">
+              <h3 className="font-semibold">{editingProject ? '프로젝트 수정' : '새 프로젝트'}</h3>
+              <button onClick={() => setShowModal(false)} className="p-1 hover:bg-slate-100 rounded">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 grid grid-cols-2 gap-4">
+              {[
+                { key: 'projectCode', label: '프로젝트코드' },
+                { key: 'projectName', label: '프로젝트명' },
+                { key: 'client', label: '고객사' },
+                { key: 'manager', label: '담당자' },
+                { key: 'startDate', label: '착수일', type: 'date' },
+                { key: 'dueDate', label: '납품예정일', type: 'date' },
+                { key: 'languagePair', label: '언어쌍' },
+                { key: 'translator', label: '번역사' },
+                { key: 'translationDeadline', label: '번역기한', type: 'date' },
+                { key: 'reviewer', label: '감수자' },
+                { key: 'reviewDeadline', label: '감수기한', type: 'date' },
+                { key: 'finalDelivery', label: '최종납품일', type: 'date' },
+              ].map(field => (
+                <div key={field.key}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
+                  <input
+                    type={field.type || 'text'}
+                    value={formData[field.key] || ''}
+                    onChange={(e) => setFormData({ ...formData, [field.key]: e.target.value })}
+                    className="w-full border rounded px-3 py-2 text-sm"
+                  />
+                </div>
+              ))}
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">비고</label>
+                <textarea
+                  value={formData.notes || ''}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  rows={2}
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 p-4 border-t">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 border rounded hover:bg-slate-50">
+                취소
+              </button>
+              <button onClick={saveProject} className="px-4 py-2 bg-slate-800 text-white rounded hover:bg-slate-700 flex items-center gap-2">
+                <Check size={18} /> 저장
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
